@@ -58,6 +58,9 @@ impl Processor {
         let initializer_token_to_receive_account = next_account_info(account_info_iter)?;
 
         let escrow_account = next_account_info(account_info_iter)?;
+        if escrow_account.owner != program_id {
+            return Err(ProgramError::IncorrectProgramId);
+        }
         let escrow_info = Escrow::unpack(&escrow_account.data.borrow())?;
         if escrow_info.temp_token_account_pubkey != *pda_temp_token_account.key {
             return Err(ProgramError::InvalidAccountData);
@@ -70,8 +73,15 @@ impl Processor {
         }
 
         let token_program = next_account_info(account_info_iter)?;
+        if token_program.key != &spl_token::id() {
+            return Err(ProgramError::IncorrectProgramId);
+        }
 
         let pda_account = next_account_info(account_info_iter)?;
+        let (pda, bump_seed) = Pubkey::find_program_address(&[b"escrow"], program_id);
+        if pda_account.key != &pda {
+            return Err(ProgramError::InvalidAccountData);
+        }
 
         // send ix to transfer token y to initializer
         let transfer_to_initializer_ix = spl_token::instruction::transfer(
@@ -92,9 +102,6 @@ impl Processor {
                 token_program.clone(),
             ],
         )?;
-
-        // send ix to transfer token x to taker        
-        let (pda, bump_seed) = Pubkey::find_program_address(&[b"escrow"], program_id);
 
         let transfer_to_taker_ix = spl_token::instruction::transfer(
             token_program.key,
